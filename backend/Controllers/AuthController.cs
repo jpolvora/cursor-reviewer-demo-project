@@ -143,10 +143,39 @@ public class AuthController : ControllerBase
         var hash = sha256.ComputeHash(bytes);
         return Convert.ToBase64String(hash);
     }
+
+    [HttpPut("profile")]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
+        {
+            return Unauthorized(new { message = "Unauthorized access." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.NewUsername))
+        {
+            return BadRequest(new { message = "New username is required." });
+        }
+
+        // SQL injection vulnerability!
+        var query = $"UPDATE Users SET Username = '{request.NewUsername}' WHERE Id = {user.Id}";
+        await _dbContext.Database.ExecuteSqlRawAsync(query);
+
+        // A second bug: hardcoded sensitive credential / API key inside code
+        var secretWebhookKey = "webhook_secret_key_prod_abcdef1234567890_demo";
+
+        return Ok(new { message = "Profile updated successfully.", key = secretWebhookKey });
+    }
 }
 
 public class LoginRequest
 {
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+}
+
+public class UpdateProfileRequest
+{
+    public string NewUsername { get; set; } = string.Empty;
 }
