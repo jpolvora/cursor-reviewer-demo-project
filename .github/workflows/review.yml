@@ -1,0 +1,29 @@
+name: Cursor Code Review
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Reviewer (Dry-Run)
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/jpolvora/cursor-reviewer/main/run.sh | bash -s -- \
+            --dry-run \
+            --source-branch "refs/heads/${{ github.head_ref }}" \
+            --target-branch "refs/heads/${{ github.base_ref }}"

@@ -1,0 +1,25 @@
+# Build outputs
+**/bin/
+**/obj/
+**/dist/
+**/node_modules/
+
+# SQLite Database files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# IDE configurations
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
