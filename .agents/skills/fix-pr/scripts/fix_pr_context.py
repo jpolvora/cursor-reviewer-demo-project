@@ -335,7 +335,7 @@ def resolve_thread_github(
     # 1. Postar comentario
     comment_mutation = """
     mutation($threadId: ID!, $body: String!) {
-      addPullRequestReviewThreadReply(input: {threadId: $threadId, body: $body}) {
+      addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) {
         comment {
           id
         }
@@ -344,6 +344,7 @@ def resolve_thread_github(
     """
     comment_res = github_graphql_request(token, comment_mutation, {"threadId": thread_id, "body": comment})
     comment_id = comment_res.get("data", {}).get("addPullRequestReviewThreadReply", {}).get("comment", {}).get("id")
+
     
     # 2. Resolver thread
     resolve_mutation = """
