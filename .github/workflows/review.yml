@@ -29,6 +29,8 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          # Previne falha de git fetch no CI para PRs de forks ou estado detached
+          git checkout -B "${{ github.head_ref }}"
           curl -fsSL https://raw.githubusercontent.com/jpolvora/cursor-reviewer/main/run.sh | bash -s -- \
             --source-branch "refs/heads/${{ github.head_ref }}" \
             --target-branch "refs/heads/${{ github.base_ref }}"
