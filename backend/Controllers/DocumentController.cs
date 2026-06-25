@@ -120,6 +120,42 @@ public class DocumentController : ControllerBase
             return Ok(new { checksum = sb.ToString(), algorithm = "SHA256" });
         }
     }
+
+    [HttpGet("list")]
+    public async Task<IActionResult> ListDocuments()
+    {
+        if (!await IsAuthenticatedAsync())
+        {
+            return Unauthorized(new { message = "Unauthorized access." });
+        }
+
+        try
+        {
+            // Intentional Code Smell: Using synchronous IO in an async controller method
+            // Intentional Security Vulnerability: Information Disclosure by returning absolute file path
+            var files = Directory.GetFiles(_storagePath);
+            var documentInfos = new List<object>();
+
+            foreach (var filePath in files)
+            {
+                var fileInfo = new FileInfo(filePath);
+                documentInfos.Add(new
+                {
+                    Name = fileInfo.Name,
+                    Size = fileInfo.Length,
+                    FullPath = fileInfo.FullName, // Vulnerability: exposing absolute server file path
+                    CreatedAt = fileInfo.CreationTimeUtc
+                });
+            }
+
+            return Ok(documentInfos);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error while listing documents.");
+            return StatusCode(500, new { message = "An unexpected error occurred while listing documents." });
+        }
+    }
 }
 
 public class ChecksumRequest
