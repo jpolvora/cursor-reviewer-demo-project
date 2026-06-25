@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../auth.service';
 
 interface StatsResponse {
@@ -13,7 +13,7 @@ interface StatsResponse {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   template: `
     <div class="dashboard-container">
       <div class="dashboard-card">
@@ -22,7 +22,12 @@ interface StatsResponse {
             <h1>Dashboard</h1>
             <p class="subtitle">Welcome back, <span class="username">{{ username }}</span></p>
           </div>
-          <button (click)="onLogout()" class="btn-logout">Logout</button>
+          <div class="header-actions">
+            <a routerLink="/quotes" class="btn-nav">Inspiration</a>
+            <a routerLink="/profile" class="btn-nav">Profile</a>
+            <a routerLink="/documents" class="btn-nav">Documents</a>
+            <button (click)="onLogout()" class="btn-logout">Logout</button>
+          </div>
         </div>
 
         <div class="stats-grid" *ngIf="stats; else loadingTpl">
@@ -98,6 +103,27 @@ interface StatsResponse {
     .username {
       color: #38bdf8;
       font-weight: 600;
+    }
+    .header-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .btn-nav {
+      padding: 0.5rem 1rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      color: #cbd5e1;
+      font-size: 0.85rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.3s ease;
+    }
+    .btn-nav:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #f8fafc;
     }
     .btn-logout {
       padding: 0.5rem 1.25rem;
