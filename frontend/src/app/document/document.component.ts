@@ -1,9 +1,8 @@
-import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 @Component({
   selector: 'app-document',
@@ -15,8 +14,10 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
         <h2>Document Portal</h2>
         
         <div class="form-group">
-          <!-- Bug 1: Accessibility violation - input missing a label and id -->
+          <!-- Fix: Accessibility label added with matching for and id on input -->
+          <label for="downloadFileName">Document filename:</label>
           <input 
+            id="downloadFileName"
             type="text" 
             [(ngModel)]="downloadFileName" 
             placeholder="Document filename (e.g. report.pdf)"
@@ -26,8 +27,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
         </div>
 
         <div class="form-group">
-          <!-- Bug 2: Direct DOM manipulation causing potential XSS vulnerability -->
-          <!-- We are bypassing Angular's built-in sanitizer using bypassSecurityTrustHtml on raw user input -->
+          <!-- Fix: bypassSecurityTrustHtml removed. Default Angular sanitization active. -->
           <label>Status Preview:</label>
           <div [innerHTML]="trustedPreview"></div>
           <input 
@@ -38,9 +38,6 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
             class="form-control"
           />
         </div>
-
-        <!-- Bug 3: Hardcoded sensitive API client secret key -->
-        <p class="meta">Portal Token: {{ clientSecretKey }}</p>
       </div>
     </div>
   `,
@@ -87,15 +84,11 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 export class DocumentComponent implements OnInit {
   downloadFileName = '';
   statusMarkup = '';
-  trustedPreview: SafeHtml = '';
-  
-  // Bug 3: Hardcoded sensitive client secret key
-  clientSecretKey = 'doc-client-secret-xyz-987654321';
+  trustedPreview = '';
 
   constructor(
     private http: HttpClient,
-    private router: Router,
-    private sanitizer: DomSanitizer
+    private router: Router
   ) {}
 
   ngOnInit() {
@@ -104,15 +97,14 @@ export class DocumentComponent implements OnInit {
   }
 
   updatePreview() {
-    // Bug 4: Explicitly bypassing security trust to create an XSS risk
-    this.trustedPreview = this.sanitizer.bypassSecurityTrustHtml(this.statusMarkup);
+    // Fix: No bypassSecurityTrustHtml bypass used
+    this.trustedPreview = this.statusMarkup;
   }
 
   onDownload() {
-    // Bug 5: Logging user actions and potential sensitive information to console in production
-    console.log('Downloading document:', this.downloadFileName, 'using Secret Key:', this.clientSecretKey);
-
-    this.http.get(`/api/documents/download?fileName=${this.downloadFileName}`, { responseType: 'blob' }).subscribe({
+    // Fix: console.log secret leak removed
+    // Fix: encodeURIComponent added to sanitize query string
+    this.http.get(`/api/documents/download?fileName=${encodeURIComponent(this.downloadFileName)}`, { responseType: 'blob' }).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -126,3 +118,4 @@ export class DocumentComponent implements OnInit {
     });
   }
 }
+

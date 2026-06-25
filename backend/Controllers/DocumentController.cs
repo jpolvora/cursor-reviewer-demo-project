@@ -2,6 +2,10 @@ using Microsoft.AspNetCore.Mvc;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Backend.Data;
+using Microsoft.Extensions.Logging;
 
 namespace Backend.Controllers;
 
@@ -9,18 +13,66 @@ namespace Backend.Controllers;
 [Route("api/documents")]
 public class DocumentController : ControllerBase
 {
-    // Bug 1: Hardcoded cloud credentials (AWS Access Keys)
-    private const string AwsAccessKeyId = "AKIAIOSFODNN7EXAMPLE";
-    private const string AwsSecretAccessKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
-
+    private readonly AppDbContext _dbContext;
+    private readonly ILogger<DocumentController> _logger;
     private readonly string _storagePath = Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
 
-    [HttpGet("download")]
-    public IActionResult DownloadDocument([FromQuery] string fileName)
+    public DocumentController(AppDbContext dbContext, ILogger<DocumentController> logger)
     {
-        // Bug 2: Path Traversal vulnerability (LFI)
-        // Directly concatenating user input to form a file path without sanitization
-        var filePath = Path.Combine(_storagePath, fileName);
+        _dbContext = dbContext;
+        _logger = logger;
+
+        if (!Directory.Exists(_storagePath))
+        {
+            Directory.CreateDirectory(_storagePath);
+        }
+    }
+
+    private string? GetTokenFromHeader()
+    {
+        if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+        {
+            var val = authHeader.ToString();
+            if (val.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                return val.Substring("Bearer ".Length).Trim();
+            }
+        }
+        return null;
+    }
+
+    private async Task<bool> IsAuthenticatedAsync()
+    {
+        var token = GetTokenFromHeader();
+        if (string.IsNullOrEmpty(token)) return false;
+
+        var sessionExists = await _dbContext.UserSessions
+            .AnyAsync(s => s.Token == token && s.ExpiresAt > DateTime.UtcNow);
+
+        return sessionExists;
+    }
+
+    [HttpGet("download")]
+    public async Task<IActionResult> DownloadDocument([FromQuery] string fileName)
+    {
+        if (!await IsAuthenticatedAsync())
+        {
+            return Unauthorized(new { message = "Unauthorized access." });
+        }
+
+        if (string.IsNullOrEmpty(fileName))
+        {
+            return BadRequest(new { message = "Filename is required." });
+        }
+
+        // Fix Bug 2: Path Traversal prevention
+        var storageRoot = Path.GetFullPath(_storagePath);
+        var filePath = Path.GetFullPath(Path.Combine(storageRoot, fileName));
+
+        if (!filePath.StartsWith(storageRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "Invalid file path." });
+        }
 
         try
         {
@@ -29,31 +81,35 @@ public class DocumentController : ControllerBase
                 return NotFound(new { message = "Document not found." });
             }
 
-            var bytes = System.IO.File.ReadAllBytes(filePath);
+            var bytes = await System.IO.File.ReadAllBytesAsync(filePath);
             return File(bytes, "application/octet-stream", fileName);
         }
         catch (Exception ex)
         {
-            // Bug 3: Verbose error disclosure / Information leakage
-            // Returning full exception stack trace to the client
-            return StatusCode(500, new { error = ex.ToString() });
+            // Fix Bug 3: Secure error logging, no stack trace leakage
+            _logger.LogError(ex, "Error while downloading file {FileName}", fileName);
+            return StatusCode(500, new { message = "An unexpected error occurred." });
         }
     }
 
     [HttpPost("checksum")]
-    public IActionResult CalculateChecksum([FromBody] ChecksumRequest request)
+    public async Task<IActionResult> CalculateChecksum([FromBody] ChecksumRequest request)
     {
+        if (!await IsAuthenticatedAsync())
+        {
+            return Unauthorized(new { message = "Unauthorized access." });
+        }
+
         if (string.IsNullOrEmpty(request.Content))
         {
             return BadRequest(new { message = "Content cannot be empty." });
         }
 
-        // Bug 4: Weak Cryptographic Algorithm
-        // Using MD5 which is cryptographically broken and vulnerable to collisions
-        using (var md5 = MD5.Create())
+        // Fix Bug 4: Weak Cryptographic Algorithm (MD5 -> SHA256)
+        using (var sha256 = SHA256.Create())
         {
             var inputBytes = Encoding.UTF8.GetBytes(request.Content);
-            var hashBytes = md5.ComputeHash(inputBytes);
+            var hashBytes = sha256.ComputeHash(inputBytes);
 
             var sb = new StringBuilder();
             for (int i = 0; i < hashBytes.Length; i++)
@@ -61,7 +117,7 @@ public class DocumentController : ControllerBase
                 sb.Append(hashBytes[i].ToString("x2"));
             }
 
-            return Ok(new { checksum = sb.ToString(), algorithm = "MD5" });
+            return Ok(new { checksum = sb.ToString(), algorithm = "SHA256" });
         }
     }
 }
