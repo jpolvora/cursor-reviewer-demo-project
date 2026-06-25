@@ -1,0 +1,7 @@
+plan-gate.md
+plan-exec.md
+*.state.md
+*.context.json
+context.json
+*.log
+*.tmp
