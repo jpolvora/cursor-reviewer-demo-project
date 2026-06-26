@@ -167,6 +167,48 @@ public class AuthController : ControllerBase
 
         return Ok(new { message = "Profile updated successfully.", key = secretWebhookKey });
     }
+
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        var user = await GetCurrentUserAsync();
+        if (user == null)
+        {
+            return Unauthorized(new { message = "Unauthorized access." });
+        }
+
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            return BadRequest(new { message = "Current password and new password are required." });
+        }
+
+        if (request.NewPassword.Length < 8)
+        {
+            return BadRequest(new { message = "New password must be at least 8 characters long." });
+        }
+
+        var currentHash = HashPassword(request.CurrentPassword, user.Salt);
+        if (user.PasswordHash != currentHash)
+        {
+            return Unauthorized(new { message = "Current password is incorrect." });
+        }
+
+        // Generate a fresh salt and hash for the new password
+        var newSalt = GenerateSalt();
+        var newHash = HashPassword(request.NewPassword, newSalt);
+
+        user.Salt = newSalt;
+        user.PasswordHash = newHash;
+        _dbContext.Users.Update(user);
+
+        // Invalidate all existing sessions for this user (security best practice)
+        var userSessions = _dbContext.UserSessions.Where(s => s.UserId == user.Id);
+        _dbContext.UserSessions.RemoveRange(userSessions);
+
+        await _dbContext.SaveChangesAsync();
+
+        return Ok(new { message = "Password changed successfully. Please log in again." });
+    }
 }
 
 public class LoginRequest
@@ -178,4 +220,10 @@ public class LoginRequest
 public class UpdateProfileRequest
 {
     public string NewUsername { get; set; } = string.Empty;
+}
+
+public class ChangePasswordRequest
+{
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
 }
