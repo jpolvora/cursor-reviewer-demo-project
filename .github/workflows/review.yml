@@ -26,7 +26,8 @@ jobs:
 
       - name: Run Reviewer
         env:
-          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          AGENTIC_CODE_REVIEWERS_ENGINE: opencode
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_NO_WARNINGS: '1'
         shell: bash
@@ -34,7 +35,7 @@ jobs:
           set -o pipefail
           # Previne falha de git fetch no CI para PRs de forks ou estado detached
           git checkout -B "${{ github.head_ref }}"
-          curl -fsSL https://raw.githubusercontent.com/jpolvora/cursor-reviewer/main/run.sh | bash -s -- \
+          curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/main/run.sh | bash -s -- \
             --gh \
             --source-branch "refs/heads/${{ github.head_ref }}" \
             --target-branch "refs/heads/${{ github.base_ref }}"
