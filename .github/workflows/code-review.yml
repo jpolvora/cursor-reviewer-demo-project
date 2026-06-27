@@ -7,7 +7,6 @@ on:
 
 jobs:
   review:
-    if: github.head_ref == 'develop'
     runs-on: ubuntu-latest
     permissions:
       contents: read
