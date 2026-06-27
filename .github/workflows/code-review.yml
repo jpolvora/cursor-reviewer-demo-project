@@ -1,4 +1,4 @@
-name: Cursor Code Review
+name: Agentic Code Review
 
 on:
   pull_request:
@@ -7,12 +7,11 @@ on:
 
 jobs:
   review:
+    if: github.head_ref == 'develop'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,19 +23,17 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run Reviewer
+      - name: Run remote reviewer (Cursor)
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          AGENTIC_CODE_REVIEWERS_ENGINE: opencode
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_NO_WARNINGS: '1'
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AGENTIC_CODE_REVIEWERS_ENGINE: cursor-sdk
+          AGENTIC_CODE_REVIEWERS_MODEL: composer-2.5
         shell: bash
         run: |
           set -o pipefail
-          # Previne falha de git fetch no CI para PRs de forks ou estado detached
           git checkout -B "${{ github.head_ref }}"
           curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/main/run.sh | bash -s -- \
             --gh \
             --source-branch "refs/heads/${{ github.head_ref }}" \
             --target-branch "refs/heads/${{ github.base_ref }}"
-
