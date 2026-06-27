@@ -28,6 +28,7 @@ jobs:
           AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AGENTIC_CODE_REVIEWERS_ENGINE: cursor-sdk
           AGENTIC_CODE_REVIEWERS_MODEL: composer-2.5
+          AGENTIC_CODE_REVIEWERS_SCORE_MIN: '2'
         shell: bash
         run: |
           set -o pipefail

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { AuthService } from '../auth.service';
 
 @Component({
   selector: 'app-document',
@@ -12,6 +13,22 @@ import { Router } from '@angular/router';
     <div class="doc-container">
       <div class="doc-card">
         <h2>Document Portal</h2>
+
+        <div class="form-group">
+          <h3>Available Documents</h3>
+          <ul class="doc-list" *ngIf="documents && documents.length > 0; else noDocs">
+            <li *ngFor="let doc of documents" class="doc-item">
+              <div>
+                <span class="doc-name">{{ doc.name }}</span>
+                <span class="doc-size"> ({{ (doc.size / 1024).toFixed(1) }} KB)</span>
+              </div>
+              <button (click)="selectDocument(doc.name)" class="btn btn-sm">Select</button>
+            </li>
+          </ul>
+          <ng-template #noDocs>
+            <p class="no-docs">No documents available.</p>
+          </ng-template>
+        </div>
         
         <div class="form-group">
           <!-- Fix: Accessibility label added with matching for and id on input -->
@@ -75,9 +92,40 @@ import { Router } from '@angular/router';
       cursor: pointer;
       border-radius: 4px;
     }
+    .btn-sm {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.8rem;
+    }
     .meta {
       font-size: 0.8rem;
       color: #64748b;
+    }
+    .doc-list {
+      list-style: none;
+      padding: 0;
+      margin: 1rem 0;
+    }
+    .doc-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem;
+      background: #1e293b;
+      border: 1px solid #334155;
+      margin-bottom: 0.5rem;
+      border-radius: 4px;
+    }
+    .doc-name {
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    .doc-size {
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .no-docs {
+      color: #64748b;
+      font-style: italic;
     }
   `]
 })
@@ -85,20 +133,41 @@ export class DocumentComponent implements OnInit {
   downloadFileName = '';
   statusMarkup = '';
   trustedPreview = '';
+  documents: any[] = [];
 
   constructor(
     private http: HttpClient,
-    private router: Router
+    private router: Router,
+    private authService: AuthService
   ) {}
 
   ngOnInit() {
     this.statusMarkup = '<strong>Portal Active</strong>';
     this.updatePreview();
+    this.loadDocuments();
   }
 
   updatePreview() {
     // Fix: No bypassSecurityTrustHtml bypass used
     this.trustedPreview = this.statusMarkup;
+  }
+
+  loadDocuments() {
+    this.http.get<any[]>('/api/documents/list').subscribe({
+      next: (data) => {
+        this.documents = data;
+      },
+      error: (err) => {
+        console.error('Error loading documents:', err);
+        this.authService.logout().subscribe(() => {
+          this.router.navigate(['/login']);
+        });
+      }
+    });
+  }
+
+  selectDocument(name: string) {
+    this.downloadFileName = name;
   }
 
   onDownload() {
