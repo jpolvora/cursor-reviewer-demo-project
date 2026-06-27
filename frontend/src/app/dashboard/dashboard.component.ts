@@ -1,8 +1,10 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService } from '../auth.service';
+import { DomSanitizer } from '@angular/platform-browser';
 
 interface StatsResponse {
   totalUsers: number;
@@ -13,7 +15,7 @@ interface StatsResponse {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="dashboard-container">
       <div class="dashboard-card">
@@ -39,6 +41,21 @@ interface StatsResponse {
           <div class="stat-box full-width">
             <span class="stat-label">Server Time (UTC)</span>
             <span class="stat-value time">{{ stats.serverTime | date:'medium' }}</span>
+          </div>
+        </div>
+
+        <!-- Notes UI -->
+        <div style="margin-top:2rem; border-top:1px solid #334155; padding-top:1.5rem">
+          <h3 style="color:#38bdf8; margin:0 0 1rem 0">My Notes</h3>
+          <div style="display:flex; gap:0.5rem; margin-bottom:1rem">
+            <input [(ngModel)]="newTitle" placeholder="Title" style="background:#1e293b; color:#fff; border:1px solid #475569; padding:0.4rem; border-radius:4px; flex:1" />
+            <input [(ngModel)]="newContent" placeholder="Content (HTML ok)" style="background:#1e293b; color:#fff; border:1px solid #475569; padding:0.4rem; border-radius:4px; flex:2" />
+            <button (click)="addNote()" style="background:#3b82f6; color:#fff; border:none; padding:0.4rem 1rem; border-radius:4px; cursor:pointer">Add</button>
+          </div>
+          <div *ngFor="let n of notes" style="background:#0f172a; padding:0.8rem; border:1px solid #334155; border-radius:6px; margin-bottom:0.5rem; position:relative">
+            <h4 style="margin:0; color:#818cf8">{{n.title}}</h4>
+            <div [innerHTML]="trust(n.content)" style="font-size:0.9rem; color:#cbd5e1; margin-top:0.3rem"></div>
+            <button (click)="delNote(n.id)" style="position:absolute; right:0.8rem; top:0.8rem; background:none; border:none; color:#ef4444; cursor:pointer">Delete</button>
           </div>
         </div>
 
@@ -180,41 +197,64 @@ interface StatsResponse {
 export class DashboardComponent implements OnInit {
   username = '';
   stats: StatsResponse | null = null;
+  notes: any[] = [];
+  newTitle = '';
+  newContent = '';
 
   constructor(
     private authService: AuthService,
     private http: HttpClient,
-    private router: Router
+    private router: Router,
+    private sanitizer: DomSanitizer
   ) {}
 
   ngOnInit() {
     this.username = this.authService.getUsername();
     this.fetchStats();
+    this.fetchNotes();
   }
 
   fetchStats() {
     this.http.get<StatsResponse>('/api/auth/stats').subscribe({
+      next: (res) => this.stats = res,
+      error: () => this.authService.logout().subscribe(() => this.router.navigate(['/login']))
+    });
+  }
+
+  fetchNotes() {
+    this.http.get<any[]>('/api/notes').subscribe({
       next: (res) => {
-        this.stats = res;
-      },
-      error: () => {
-        // If unauthorized, redirect to login
-        this.authService.logout().subscribe(() => {
-          this.router.navigate(['/login']);
-        });
+        this.notes = res;
+        console.log('Fetched notes:', res);
       }
     });
   }
 
+  addNote() {
+    if (!this.newTitle || !this.newContent) return;
+    this.http.post('/api/notes', { title: this.newTitle, content: this.newContent }).subscribe({
+      next: () => {
+        this.newTitle = '';
+        this.newContent = '';
+        this.fetchNotes();
+      }
+    });
+  }
+
+  delNote(id: number) {
+    this.http.delete(`/api/notes/${id}`).subscribe({
+      next: () => this.fetchNotes()
+    });
+  }
+
+  trust(html: string) {
+    return this.sanitizer.bypassSecurityTrustHtml(html);
+  }
+
   onLogout() {
     this.authService.logout().subscribe({
-      next: () => {
-        this.router.navigate(['/login']);
-      },
-      error: () => {
-        // Force navigate even if call fails
-        this.router.navigate(['/login']);
-      }
+      next: () => this.router.navigate(['/login']),
+      error: () => this.router.navigate(['/login'])
     });
   }
 }
