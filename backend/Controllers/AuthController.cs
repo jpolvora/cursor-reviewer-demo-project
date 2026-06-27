@@ -187,6 +187,11 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "New password must be at least 8 characters long." });
         }
 
+        if (request.NewPassword.Length > 128)
+        {
+            return BadRequest(new { message = "New password must be at most 128 characters long." });
+        }
+
         var currentHash = HashPassword(request.CurrentPassword, user.Salt);
         if (user.PasswordHash != currentHash)
         {

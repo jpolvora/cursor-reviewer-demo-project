@@ -131,9 +131,8 @@ public class DocumentController : ControllerBase
 
         try
         {
-            // Intentional Code Smell: Using synchronous IO in an async controller method
-            // Intentional Security Vulnerability: Information Disclosure by returning absolute file path
-            var files = Directory.GetFiles(_storagePath);
+            // Fix: Offload blocking I/O to a background thread to prevent thread starvation
+            var files = await Task.Run(() => Directory.GetFiles(_storagePath));
             var documentInfos = new List<object>();
 
             foreach (var filePath in files)
@@ -143,7 +142,7 @@ public class DocumentController : ControllerBase
                 {
                     Name = fileInfo.Name,
                     Size = fileInfo.Length,
-                    FullPath = fileInfo.FullName, // Vulnerability: exposing absolute server file path
+                    // Fix: Removed FullPath (Information Disclosure vulnerability)
                     CreatedAt = fileInfo.CreationTimeUtc
                 });
             }

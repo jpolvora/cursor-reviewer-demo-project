@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { AuthService } from '../auth.service';
 
 @Component({
   selector: 'app-document',
@@ -136,7 +137,8 @@ export class DocumentComponent implements OnInit {
 
   constructor(
     private http: HttpClient,
-    private router: Router
+    private router: Router,
+    private authService: AuthService
   ) {}
 
   ngOnInit() {
@@ -157,6 +159,9 @@ export class DocumentComponent implements OnInit {
       },
       error: (err) => {
         console.error('Error loading documents:', err);
+        this.authService.logout().subscribe(() => {
+          this.router.navigate(['/login']);
+        });
       }
     });
   }
