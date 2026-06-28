@@ -1,15 +1,23 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService } from '../auth.service';
 import { DomSanitizer } from '@angular/platform-browser';
+import { Subject, takeUntil } from 'rxjs';
 
 interface StatsResponse {
   totalUsers: number;
   activeSessions: number;
   serverTime: string;
+}
+
+interface Note {
+  id: number;
+  title: string;
+  content: string;
+  userId: number;
 }
 
 @Component({
@@ -194,10 +202,12 @@ interface StatsResponse {
     }
   `]
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, OnDestroy {
+  private readonly destroy$ = new Subject<void>();
+
   username = '';
   stats: StatsResponse | null = null;
-  notes: any[] = [];
+  notes: Note[] = [];
   newTitle = '';
   newContent = '';
 
@@ -215,14 +225,14 @@ export class DashboardComponent implements OnInit {
   }
 
   fetchStats() {
-    this.http.get<StatsResponse>('/api/auth/stats').subscribe({
+    this.http.get<StatsResponse>('/api/auth/stats').pipe(takeUntil(this.destroy$)).subscribe({
       next: (res) => this.stats = res,
       error: () => this.authService.logout().subscribe(() => this.router.navigate(['/login']))
     });
   }
 
   fetchNotes() {
-    this.http.get<any[]>('/api/notes').subscribe({
+    this.http.get<Note[]>('/api/notes').pipe(takeUntil(this.destroy$)).subscribe({
       next: (res) => {
         this.notes = res;
         console.log('Fetched notes:', res);
@@ -232,7 +242,7 @@ export class DashboardComponent implements OnInit {
 
   addNote() {
     if (!this.newTitle || !this.newContent) return;
-    this.http.post('/api/notes', { title: this.newTitle, content: this.newContent }).subscribe({
+    this.http.post('/api/notes', { title: this.newTitle, content: this.newContent }).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
         this.newTitle = '';
         this.newContent = '';
@@ -242,9 +252,14 @@ export class DashboardComponent implements OnInit {
   }
 
   delNote(id: number) {
-    this.http.delete(`/api/notes/${id}`).subscribe({
+    this.http.delete(`/api/notes/${id}`).pipe(takeUntil(this.destroy$)).subscribe({
       next: () => this.fetchNotes()
     });
+  }
+
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   trust(html: string) {
