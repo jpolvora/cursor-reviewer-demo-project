@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<SessionActivity> SessionActivities => Set<SessionActivity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

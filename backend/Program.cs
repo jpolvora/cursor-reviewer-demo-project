@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Backend.Data;
 using Backend.Models;
 using Backend.Controllers;
+using Backend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // Enable Controllers
 builder.Services.AddControllers();
+builder.Services.AddScoped<SessionActivityService>();
 
 // Configure CORS for Angular frontend
 builder.Services.AddCors(options =>
