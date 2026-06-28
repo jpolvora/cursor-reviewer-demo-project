@@ -5,89 +5,65 @@ on:
     workflows: ["Agentic Code Review"]
     types:
       - completed
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: Número da PR (obrigatório em execução manual)
-        required: true
-        type: string
-      source_branch:
-        description: Branch de origem (head ref)
-        required: true
-        type: string
-      target_branch:
-        description: Branch de destino (base ref)
-        required: false
-        default: main
-        type: string
 
 permissions:
-  pull-requests: write
   contents: write
+  pull-requests: write
 
 jobs:
   auto-fix:
-    concurrency:
-      group: auto-fix-${{ github.event.workflow_run.pull_requests[0].number || github.event.inputs.pr_number || github.run_id }}
-      cancel-in-progress: false
-    name: Auto Fix
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
     steps:
       - name: Get PR Info
         id: pr-info
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "pr_number=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
-            echo "source_branch=${{ github.event.inputs.source_branch }}" >> $GITHUB_OUTPUT
-            echo "target_branch=${{ github.event.inputs.target_branch }}" >> $GITHUB_OUTPUT
-          else
-            PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
-            HEAD_BRANCH="${{ github.event.workflow_run.pull_requests[0].head.ref }}"
-            BASE_BRANCH="${{ github.event.workflow_run.pull_requests[0].base.ref }}"
-            
-            if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
-              HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
-              echo "Buscando PR para o commit $HEAD_SHA..."
-              PR_DATA=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/pulls" -H "Accept: application/vnd.github.groot-preview+json" --jq '.[0]')
-              
-              PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number')
-              HEAD_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
-              BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
-            fi
-            
-            if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
-              echo "::error::Não foi possível determinar o número da PR para Auto-Fix."
-              exit 1
-            fi
-            
-            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-            echo "source_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
-            echo "target_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
+          PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
+          HEAD_BRANCH="${{ github.event.workflow_run.pull_requests[0].head.ref }}"
+          BASE_BRANCH="${{ github.event.workflow_run.pull_requests[0].base.ref }}"
+          
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
+            PR_DATA=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/pulls" --jq '.[0]')
+            PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number')
+            HEAD_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
+            BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
           fi
+          
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          echo "source_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
+          echo "target_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ steps.pr-info.outputs.source_branch }}
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Run Auto-Fix (OpenCode)
+      - name: Check for active threads
+        id: check-threads
         env:
-          AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
+        run: |
+          ACTIVE_THREADS=$(node .agents/skills/solve-pr/scripts/fetch_threads.cjs ${{ steps.pr-info.outputs.pr_number }} --json | jq '.activeThreads | length')
+          echo "active_threads_count=$ACTIVE_THREADS" >> $GITHUB_OUTPUT
+          echo "Active threads: $ACTIVE_THREADS"
+
+      - name: Run Auto-Fix
+        if: ${{ steps.check-threads.outputs.active_threads_count != '0' }}
+        env:
+          AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
           AGENTIC_CODE_REVIEWERS_ENGINE: opencode
           AGENTIC_CODE_REVIEWERS_MODEL: opencode-go/deepseek-v4-flash
-          AGENTIC_CODE_REVIEWERS_BOT_TAG: '[Cursor Reviewer · OpenCode]'
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-        shell: bash
         run: |
-          set -o pipefail
           git checkout -B "${{ steps.pr-info.outputs.source_branch }}"
           curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/main/run.sh | bash -s -- \
             --gh \
