@@ -55,17 +55,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Check for active threads
-        id: check-threads
-        env:
-          AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
-        run: |
-          ACTIVE=$(node .agents/skills/solve-pr/scripts/fetch_threads.cjs ${{ steps.pr-info.outputs.pr_number }} --json 2>/dev/null | jq '.activeThreads | length' || echo 0)
-          echo "Active threads: $ACTIVE"
-          echo "active_threads_count=$ACTIVE" >> "$GITHUB_OUTPUT"
 
       - name: Run auto-fix
-        if: ${{ steps.check-threads.outputs.active_threads_count != '0' }}
         env:
           AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
           AGENTIC_CODE_REVIEWERS_ENGINE: opencode

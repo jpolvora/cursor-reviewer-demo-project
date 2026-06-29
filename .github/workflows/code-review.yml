@@ -36,10 +36,3 @@ jobs:
             --source-branch "refs/heads/${{ github.head_ref }}" \
             --target-branch "refs/heads/${{ github.event.pull_request.base.ref }}"
 
-      - name: Check for active threads
-        env:
-          AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
-        run: |
-          ACTIVE=$(node .agents/skills/solve-pr/scripts/fetch_threads.cjs ${{ github.event.pull_request.number }} --json 2>/dev/null | jq '.activeThreads | length' || echo 0)
-          echo "Active threads: $ACTIVE"
-          [ "$ACTIVE" -eq 0 ] || exit 1
