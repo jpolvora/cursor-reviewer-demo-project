@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SessionActivity> SessionActivities => Set<SessionActivity>();
+    public DbSet<TodoTask> TodoTasks => Set<TodoTask>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,5 +38,12 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<AuditLog>()
             .HasIndex(a => new { a.UserId, a.Timestamp });
+
+        modelBuilder.Entity<TodoTask>()
+            .HasOne(t => t.User)
+            .WithMany()
+            .HasForeignKey(t => t.UserId)
+            .IsRequired()
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
