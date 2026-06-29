@@ -64,11 +64,11 @@ Auto-fix runs after each code-review workflow completes. When it commits and pus
 
 | | |
 |---|---|
-| **Triggers** | `pull_request` — `opened`, `synchronize`, `reopened` |
+| **Triggers** | `pull_request` → `main` — `opened`, `synchronize`, `reopened` |
 | **Engine** | `cursor-sdk` / `composer-2.5` |
-| **Runner** | `curl` + `run.sh` (`--gh`, source/target branch refs) |
+| **Runner** | `curl` + `run.sh@release` (`--gh`, `--pr-id`, source/target branch refs) |
 | **Scope** | Backend (C#) and frontend (TypeScript/Angular) diffs |
-| **Outcome** | Publishes review threads on the PR; unresolved threads block merge |
+| **Outcome** | Publishes review threads; fails if active threads remain (triggers auto-fix) |
 
 ### Agentic Auto Fix (`.github/workflows/auto-fix.yml`)
 
@@ -78,7 +78,7 @@ Auto-fix runs after each code-review workflow completes. When it commits and pus
 | **Condition** | Runs when the review workflow ends in `success` or `failure` |
 | **Engine** | `opencode` / `opencode-go/deepseek-v4-flash` |
 | **Concurrency** | One job per PR (`cancel-in-progress: false`) |
-| **Behavior** | `--auto-fix` — reads open threads, applies fixes, validates build, resolves threads, pushes to the PR branch |
+| **Behavior** | Skips when no active threads; otherwise `--auto-fix` — reads open threads, applies fixes, validates build, resolves threads, pushes to the PR branch |
 
 PR metadata is resolved from `workflow_run.pull_requests` or, as fallback, `gh api …/commits/{sha}/pulls`.
 

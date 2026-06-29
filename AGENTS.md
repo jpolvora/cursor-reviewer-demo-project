@@ -29,7 +29,8 @@ This is a **demo repository** showcasing the integration of [agentic-code-review
 
 ## 📁 Project Structure
 
-*   **[.github/workflows/review.yml](file:///.github/workflows/review.yml)**: The GitHub Actions workflow executing `agentic-code-reviewers` remotely.
+*   **[.github/workflows/code-review.yml](file:///.github/workflows/code-review.yml)**: PR-triggered AI code review via remote `run.sh` (`release` branch).
+*   **[.github/workflows/auto-fix.yml](file:///.github/workflows/auto-fix.yml)**: Post-review auto-fix pipeline (`workflow_run` after code review).
 *   **[backend/](file:///backend/)**: ASP.NET Core (C#) Web API application.
 *   **[frontend/](file:///frontend/)**: Angular (TypeScript) client application.
 
@@ -48,13 +49,18 @@ GitHub Actions checkout defaults to a detached HEAD on a merge commit. Since `ag
 *   This triggers **Local Mode** in `agentic-code-reviewers`, using the checked-out HEAD directly for diff analysis and preventing network fetch errors.
 
 ### 2. Execution Flags
-*   We run the reviewer remotely via:
+*   We run the reviewer remotely via the **`release`** branch (compiled artifacts aligned with `run.sh`):
     ```bash
-    curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/main/run.sh | bash -s -- \
+    curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/release/run.sh | bash -s -- \
+      --engine cursor-sdk --model composer-2.5 \
+      --gh \
+      --pr-id "${{ github.event.pull_request.number }}" \
       --source-branch "refs/heads/${{ github.head_ref }}" \
-      --target-branch "refs/heads/${{ github.base_ref }}"
+      --target-branch "refs/heads/${{ github.event.pull_request.base.ref }}"
     ```
-*   Ensure that `--source-branch` and `--target-branch` parameters are supplied explicitly.
+*   Supply `--gh`, `--pr-id`, `--source-branch`, and `--target-branch` explicitly.
+*   Prefer `AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN` (PAT) for thread resolution; fall back to `github.token` for publishing only.
+*   After review, the workflow fails if active bot threads remain — triggering the auto-fix pipeline.
 
 ---
 
