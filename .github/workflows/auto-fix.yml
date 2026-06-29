@@ -1,62 +1,71 @@
 name: Agentic Auto Fix
 
 on:
-  workflow_run:
-    workflows: ["Agentic Code Review"]
-    types:
-      - completed
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number'
+        required: true
+        type: string
+      head_ref:
+        description: 'Head branch ref'
+        required: true
+        type: string
+      base_ref:
+        description: 'Base branch ref'
+        required: true
+        type: string
+      iteration:
+        description: 'Current loop iteration (from code-review)'
+        required: true
+        type: string
+        default: '1'
 
 permissions:
   contents: write
   pull-requests: write
+  actions: write
+
+concurrency:
+  group: auto-fix-${{ github.event.inputs.pr_number }}
+  cancel-in-progress: false
 
 jobs:
   auto-fix:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
+    env:
+      PR_NUMBER: ${{ github.event.inputs.pr_number }}
+      HEAD_REF: ${{ github.event.inputs.head_ref }}
+      BASE_REF: ${{ github.event.inputs.base_ref }}
+      ITERATION: ${{ github.event.inputs.iteration }}
     steps:
-      - name: Get PR Info
-        id: pr-info
-        env:
-          GH_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
-        run: |
-          PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
-          HEAD_BRANCH="${{ github.event.workflow_run.pull_requests[0].head.ref }}"
-          BASE_BRANCH="${{ github.event.workflow_run.pull_requests[0].base.ref }}"
-          
-          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
-            HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
-            PR_DATA=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/pulls" --jq '.[0]')
-            PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number')
-            HEAD_BRANCH=$(echo "$PR_DATA" | jq -r '.head.ref')
-            BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
-          fi
-          
-          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-          echo "source_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
-          echo "target_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ steps.pr-info.outputs.source_branch }}
+          ref: ${{ github.event.inputs.head_ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
+      - name: Capture HEAD before fix
+        id: before
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
       - name: Check for active threads
         id: check-threads
         env:
           AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
         run: |
-          ACTIVE_THREADS=$(node .agents/skills/solve-pr/scripts/fetch_threads.cjs ${{ steps.pr-info.outputs.pr_number }} --json | jq '.activeThreads | length')
+          ACTIVE_THREADS=$(node .agents/skills/solve-pr/scripts/fetch_threads.cjs $PR_NUMBER --json | jq '.activeThreads | length')
           echo "active_threads_count=$ACTIVE_THREADS" >> $GITHUB_OUTPUT
           echo "Active threads: $ACTIVE_THREADS"
 
       - name: Run Auto-Fix
+        id: autofix
         if: ${{ steps.check-threads.outputs.active_threads_count != '0' }}
         env:
           AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
@@ -64,10 +73,41 @@ jobs:
           AGENTIC_CODE_REVIEWERS_MODEL: opencode-go/deepseek-v4-flash
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
-          git checkout -B "${{ steps.pr-info.outputs.source_branch }}"
+          git checkout -B "$HEAD_REF"
           curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/main/run.sh | bash -s -- \
             --gh \
-            --pr-id "${{ steps.pr-info.outputs.pr_number }}" \
-            --source-branch "refs/heads/${{ steps.pr-info.outputs.source_branch }}" \
-            --target-branch "refs/heads/${{ steps.pr-info.outputs.target_branch }}" \
+            --pr-id "$PR_NUMBER" \
+            --source-branch "refs/heads/$HEAD_REF" \
+            --target-branch "refs/heads/$BASE_REF" \
             --auto-fix
+
+      - name: Detect if fixes were applied and dispatch next review
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
+        run: |
+          CURRENT_SHA=$(git rev-parse HEAD)
+          BEFORE_SHA="${{ steps.before.outputs.sha }}"
+
+          if [ "$CURRENT_SHA" != "$BEFORE_SHA" ]; then
+            echo "Auto-fix applied changes ($BEFORE_SHA -> $CURRENT_SHA)."
+
+            # Still have active threads after fix? Check before dispatching.
+            ACTIVE_THREADS=$(node .agents/skills/solve-pr/scripts/fetch_threads.cjs $PR_NUMBER --json | jq '.activeThreads | length')
+            echo "Active threads after fix: $ACTIVE_THREADS"
+
+            if [ "$ACTIVE_THREADS" -gt 0 ]; then
+              NEXT_ITER=$((ITERATION + 1))
+              echo "Dispatching next code-review (iteration $NEXT_ITER)..."
+              gh workflow run "Agentic Code Review" \
+                --ref "$HEAD_REF" \
+                -f pr_number="$PR_NUMBER" \
+                -f head_ref="$HEAD_REF" \
+                -f base_ref="$BASE_REF" \
+                -f iteration="$NEXT_ITER"
+            else
+              echo "All threads resolved. Loop complete."
+            fi
+          else
+            echo "Auto-fix did not produce any changes. Stopping loop."
+          fi

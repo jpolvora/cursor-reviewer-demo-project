@@ -3,14 +3,45 @@ name: Agentic Code Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number'
+        required: true
+        type: string
+      head_ref:
+        description: 'Head branch ref'
+        required: true
+        type: string
+      base_ref:
+        description: 'Base branch ref'
+        required: true
+        type: string
+      iteration:
+        description: 'Current loop iteration'
+        required: true
+        type: string
+        default: '1'
 
 permissions:
   contents: read
   pull-requests: write
+  actions: write
+
+concurrency:
+  group: code-review-${{ github.event.inputs.pr_number || github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   review:
     runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ github.event.inputs.pr_number || github.event.pull_request.number }}
+      HEAD_REF: ${{ github.event.inputs.head_ref || github.head_ref }}
+      BASE_REF: ${{ github.event.inputs.base_ref || github.base_ref }}
+      ITERATION: ${{ github.event.inputs.iteration || '1' }}
+      PR_ACTION: ${{ github.event.action || 'dispatch' }}
+      MAX_ITERATIONS: 5
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,19 +60,44 @@ jobs:
           AGENTIC_CODE_REVIEWERS_ENGINE: cursor-sdk
           AGENTIC_CODE_REVIEWERS_MODEL: composer-2.5
         run: |
-          git checkout -B "${{ github.head_ref }}"
+          git checkout -B "$HEAD_REF"
           curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/main/run.sh | bash -s -- \
             --gh \
-            --source-branch "refs/heads/${{ github.head_ref }}" \
-            --target-branch "refs/heads/${{ github.base_ref }}"
+            --source-branch "refs/heads/$HEAD_REF" \
+            --target-branch "refs/heads/$BASE_REF"
 
-      - name: Check for active threads
+      - name: Check threads and conditionally dispatch auto-fix
         env:
           AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
         run: |
-          ACTIVE_THREADS=$(node .agents/skills/solve-pr/scripts/fetch_threads.cjs ${{ github.event.pull_request.number }} --json | jq '.activeThreads | length')
-          echo "Active threads: $ACTIVE_THREADS"
-          if [ "$ACTIVE_THREADS" -gt 0 ]; then
-            echo "Unresolved threads found. Blocking merge."
-            exit 1
+          ACTIVE_THREADS=$(node .agents/skills/solve-pr/scripts/fetch_threads.cjs $PR_NUMBER --json | jq '.activeThreads | length')
+          echo "Active threads: $ACTIVE_THREADS (action=$PR_ACTION, iteration=$ITERATION)"
+
+          if [ "$ACTIVE_THREADS" -eq 0 ]; then
+            echo "No unresolved threads. PR is clean."
+            exit 0
           fi
+
+          # Only dispatch auto-fix on PR "opened" or explicit dispatch events
+          # "synchronize" from bot pushes just updates check status without dispatching
+          SHOULD_DISPATCH="false"
+          if [ "$PR_ACTION" = "opened" ] || [ "$PR_ACTION" = "reopened" ]; then
+            SHOULD_DISPATCH="true"
+          elif [ "$PR_ACTION" = "dispatch" ] && [ "$ITERATION" -lt "$MAX_ITERATIONS" ]; then
+            SHOULD_DISPATCH="true"
+          fi
+
+          if [ "$SHOULD_DISPATCH" = "true" ]; then
+            echo "Dispatching auto-fix (iteration $ITERATION)..."
+            gh workflow run "Agentic Auto Fix" \
+              --ref "$HEAD_REF" \
+              -f pr_number="$PR_NUMBER" \
+              -f head_ref="$HEAD_REF" \
+              -f base_ref="$BASE_REF" \
+              -f iteration="$ITERATION"
+          elif [ "$PR_ACTION" = "dispatch" ]; then
+            echo "::warning::Max iterations ($MAX_ITERATIONS) reached. Developer intervention needed."
+          fi
+
+          echo "Threads remain — blocking merge."
+          exit 1
