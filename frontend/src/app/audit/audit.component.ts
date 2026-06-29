@@ -1,8 +1,12 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
+
 import { CommonModule } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+
 import { Router } from '@angular/router';
 import { AuthService } from '../auth.service';
+import { Subject, takeUntil } from 'rxjs';
+
 
 interface AuditEntry {
   id: number;
@@ -238,12 +242,15 @@ interface AuditResponse {
     }
   `]
 })
-export class AuditComponent implements OnInit {
+export class AuditComponent implements OnInit, OnDestroy {
+
   logs: AuditEntry[] = [];
   currentPage = 1;
   pageSize = 50;
   total = 0;
   filterAction = '';
+  private readonly destroy$ = new Subject<void>();
+
 
   constructor(
     private http: HttpClient,
@@ -255,6 +262,12 @@ export class AuditComponent implements OnInit {
     return Math.max(1, Math.ceil(this.total / this.pageSize));
   }
 
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+
   ngOnInit() {
     this.loadLogs();
   }
@@ -265,20 +278,20 @@ export class AuditComponent implements OnInit {
       url += `&action=${this.filterAction}`;
     }
 
-    this.http.get<AuditResponse>(url).subscribe({
+    this.http.get<AuditResponse>(url).pipe(takeUntil(this.destroy$)).subscribe({
       next: (res) => {
-        this.logs = res.data.filter(entry => {
-          if (!this.filterAction) return true;
-          return entry.action === this.filterAction;
-        });
-        this.total = this.filterAction ? this.logs.length : res.total;
+        this.logs = res.data;
+        this.total = res.total;
       },
-      error: () => {
-        this.authService.logout().subscribe(() => {
-          this.router.navigate(['/login']);
-        });
+      error: (err: HttpErrorResponse) => {
+        if (err.status === 401 || err.status === 403) {
+          this.authService.logout().subscribe(() => {
+            this.router.navigate(['/login']);
+          });
+        }
       }
     });
+
   }
 
   onFilterChange(event: Event) {
