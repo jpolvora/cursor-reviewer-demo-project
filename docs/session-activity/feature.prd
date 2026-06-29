@@ -1,0 +1,107 @@
+# Session Activity Monitor
+
+## Overview
+
+Authenticated users need visibility into recent account activity (logins, profile changes, document access) to detect unauthorized use and satisfy internal compliance reporting. The feature spans a persisted audit trail on the backend and a read-only monitor view in the Angular client.
+
+## Goals
+
+- Record significant user actions with timestamp, action type, and contextual metadata.
+- Allow the signed-in user to browse their own activity history with filtering and pagination.
+- Support CSV export of the current user's activity for offline review.
+- Ensure activity data is never exposed across user boundaries.
+
+## Non-Goals
+
+- Real-time push notifications.
+- Admin-wide cross-tenant activity dashboards.
+- Long-term archival beyond 90 days (future work).
+
+## User Stories
+
+1. As a signed-in user, I want to see my recent session events so I can verify account usage.
+2. As a signed-in user, I want to filter events by action type and date range.
+3. As a signed-in user, I want to export my activity as CSV for compliance records.
+
+## Functional Requirements
+
+### FR-1 Event Recording
+
+The system SHALL persist session activity events with: `UserId`, `ActionType`, `Description`, `IpAddress`, `UserAgent`, `OccurredAt` (UTC), and optional `Metadata` JSON.
+
+Supported `ActionType` values: `Login`, `Logout`, `ProfileUpdate`, `PasswordChange`, `DocumentAccess`, `ExportRequested`.
+
+### FR-2 Authentication & Authorization
+
+All read and export endpoints MUST require a valid bearer session token.
+
+Users MUST only retrieve or export activity belonging to their own account. Query parameters MUST NOT allow accessing another user's data.
+
+### FR-3 Listing & Pagination
+
+`GET /api/activity` MUST return paginated results (default page size 25, max 100).
+
+Supported query params: `page`, `pageSize`, `actionType`, `from`, `to`, `search`.
+
+Date filters MUST interpret `from`/`to` as UTC ISO-8601 strings.
+
+### FR-4 Export
+
+`GET /api/activity/export` MUST return `text/csv` for the authenticated user only.
+
+Export MUST require authentication identical to listing.
+
+CSV MUST include headers: `OccurredAt`, `ActionType`, `Description`, `IpAddress`.
+
+### FR-5 Frontend Monitor
+
+Route `/activity` MUST be available only to authenticated users.
+
+The monitor MUST fetch paginated data from the API proxy (`/api/activity`).
+
+User-supplied filter values MUST be rendered safely without HTML injection.
+
+Export MUST use the authenticated HTTP client (Authorization header), not query-string tokens.
+
+### FR-6 Data Retention & Privacy
+
+`Metadata` MUST NOT store passwords, session tokens, or other credentials.
+
+Events older than 90 days SHOULD be eligible for purge (implementation may defer purge job).
+
+All timestamps persisted and returned MUST use UTC.
+
+## Acceptance Criteria
+
+| ID | Criterion |
+|----|-----------|
+| AC-1 | Authenticated user receives only their own events from list and export endpoints. |
+| AC-2 | Unauthenticated requests to list or export return HTTP 401. |
+| AC-3 | List endpoint supports pagination with `page` and `pageSize`; default page size is 25. |
+| AC-4 | Search/filter queries use parameterized database access (no string-concatenated SQL). |
+| AC-5 | `OccurredAt` is stored and serialized in UTC. |
+| AC-6 | Sensitive values (passwords, bearer tokens) never appear in `Metadata` or API responses. |
+| AC-7 | `/activity` route is protected by the existing auth guard. |
+| AC-8 | Activity monitor renders event descriptions without unsafe HTML binding. |
+| AC-9 | CSV export is triggered through the standard authenticated HttpClient pipeline. |
+| AC-10 | Recording a batch of events does not partially commit on failure (atomic where applicable). |
+
+## API Sketch
+
+```
+GET  /api/activity?page=1&pageSize=25&actionType=Login
+GET  /api/activity/export?from=2026-01-01&to=2026-06-01
+POST /api/activity/record   (internal / future hook)
+```
+
+## Dependencies
+
+- Existing `UserSession` token validation pattern used by `AuthController` and `DocumentController`.
+- SQLite via `AppDbContext`.
+
+## Rollout
+
+1. Deploy backend model, service, and controller.
+2. Register DbSet and DI service in `Program.cs`.
+3. Ship Angular route, service, and monitor component.
+4. Verify acceptance criteria AC-1 through AC-10 in staging.
