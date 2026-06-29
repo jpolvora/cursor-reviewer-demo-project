@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService } from '../auth.service';
+import { UserCharm, UserCharmService } from '../user-charm/user-charm.service';
 
 interface StatsResponse {
   totalUsers: number;
@@ -23,6 +24,23 @@ interface StatsResponse {
             <p class="subtitle">Welcome back, <span class="username">{{ username }}</span></p>
           </div>
           <button (click)="onLogout()" class="btn-logout">Logout</button>
+        </div>
+
+        <div class="charm-panel" *ngIf="charm">
+          <div class="charm-display">
+            <span class="charm-emoji">{{ charm.charmEmoji }}</span>
+            <div>
+              <p class="charm-label">Your lucky number</p>
+              <p class="charm-number" *ngIf="charm.hasRolled; else notRolledTpl">{{ charm.luckyNumber }}</p>
+              <ng-template #notRolledTpl>
+                <p class="charm-placeholder">Not rolled yet</p>
+              </ng-template>
+              <p class="charm-tagline" *ngIf="charm.charmTagline">{{ charm.charmTagline }}</p>
+            </div>
+          </div>
+          <button class="btn-reroll" (click)="onRerollCharm()" [disabled]="charmLoading">
+            {{ charmLoading ? 'Rolling…' : (charm.hasRolled ? 'Reroll charm' : 'Roll my charm') }}
+          </button>
         </div>
 
         <div class="stats-grid" *ngIf="stats; else loadingTpl">
@@ -98,6 +116,63 @@ interface StatsResponse {
     .username {
       color: #38bdf8;
       font-weight: 600;
+    }
+    .charm-panel {
+      margin-bottom: 2rem;
+      padding: 1.25rem 1.5rem;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(129, 140, 248, 0.25);
+      border-radius: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .charm-display {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .charm-emoji {
+      font-size: 2.5rem;
+      line-height: 1;
+    }
+    .charm-label {
+      margin: 0;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #a5b4fc;
+    }
+    .charm-number {
+      margin: 0.15rem 0 0;
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #e0e7ff;
+    }
+    .charm-placeholder {
+      margin: 0.15rem 0 0;
+      color: #94a3b8;
+      font-style: italic;
+    }
+    .charm-tagline {
+      margin: 0.35rem 0 0;
+      font-size: 0.85rem;
+      color: #cbd5e1;
+    }
+    .btn-reroll {
+      padding: 0.55rem 1.1rem;
+      background: linear-gradient(90deg, #818cf8, #6366f1);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-reroll:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
     .btn-logout {
       padding: 0.5rem 1.25rem;
@@ -180,16 +255,40 @@ interface StatsResponse {
 export class DashboardComponent implements OnInit {
   username = '';
   stats: StatsResponse | null = null;
+  charm: UserCharm | null = null;
+  charmLoading = false;
 
   constructor(
     private authService: AuthService,
     private http: HttpClient,
-    private router: Router
+    private router: Router,
+    private charmService: UserCharmService
   ) {}
 
   ngOnInit() {
     this.username = this.authService.getUsername();
     this.fetchStats();
+    this.fetchCharm();
+  }
+
+  fetchCharm() {
+    this.charmService.getCharm().subscribe({
+      next: (res) => { this.charm = res; },
+      error: () => { /* charm is optional UI */ }
+    });
+  }
+
+  onRerollCharm() {
+    this.charmLoading = true;
+    this.charmService.rerollCharm().subscribe({
+      next: (res) => {
+        this.charm = res;
+        this.charmLoading = false;
+      },
+      error: () => {
+        this.charmLoading = false;
+      }
+    });
   }
 
   fetchStats() {

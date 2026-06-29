@@ -37,6 +37,7 @@ public static class SessionActivityActions
     public const string PasswordChange = "PasswordChange";
     public const string DocumentAccess = "DocumentAccess";
     public const string ExportRequested = "ExportRequested";
+    public const string CharmReroll = "CharmReroll";
 
     public static readonly HashSet<string> All = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -45,7 +46,8 @@ public static class SessionActivityActions
         ProfileUpdate,
         PasswordChange,
         DocumentAccess,
-        ExportRequested
+        ExportRequested,
+        CharmReroll
     };
 }
 

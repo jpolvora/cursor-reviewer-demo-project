@@ -13,6 +13,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Enable Controllers
 builder.Services.AddControllers();
 builder.Services.AddScoped<SessionActivityService>();
+builder.Services.AddScoped<UserCharmService>();
 
 // Configure CORS for Angular frontend
 builder.Services.AddCors(options =>
@@ -38,6 +39,7 @@ using (var scope = app.Services.CreateScope())
     
     // EnsureCreated creates the SQLite database file and tables if they don't exist
     dbContext.Database.EnsureCreated();
+    EnsureUserCharmColumns(dbContext);
 
     // Seed default admin user
     if (!dbContext.Users.Any())
@@ -56,3 +58,29 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+static void EnsureUserCharmColumns(AppDbContext dbContext)
+{
+    var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    using (var command = dbContext.Database.GetDbConnection().CreateCommand())
+    {
+        command.CommandText = "PRAGMA table_info(Users);";
+        dbContext.Database.OpenConnection();
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+            columns.Add(reader.GetString(1));
+    }
+
+    var alters = new List<string>();
+    if (!columns.Contains("LuckyNumber"))
+        alters.Add("ALTER TABLE Users ADD COLUMN LuckyNumber INTEGER NULL;");
+    if (!columns.Contains("CharmEmoji"))
+        alters.Add("ALTER TABLE Users ADD COLUMN CharmEmoji TEXT NOT NULL DEFAULT '🎲';");
+    if (!columns.Contains("CharmTagline"))
+        alters.Add("ALTER TABLE Users ADD COLUMN CharmTagline TEXT NULL;");
+    if (!columns.Contains("CharmRolledAt"))
+        alters.Add("ALTER TABLE Users ADD COLUMN CharmRolledAt TEXT NULL;");
+
+    foreach (var sql in alters)
+        dbContext.Database.ExecuteSqlRaw(sql);
+}
