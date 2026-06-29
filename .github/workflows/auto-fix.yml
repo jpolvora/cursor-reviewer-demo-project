@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: 'PR number'
+        description: PR number
         required: true
         type: string
 
@@ -27,7 +27,7 @@ jobs:
       - name: Extract PR info
         id: pr-info
         env:
-          GH_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN || github.token }}
         run: |
           PN="${{ github.event.workflow_run.pull_requests[0].number }}"
           HB="${{ github.event.workflow_run.pull_requests[0].head.ref }}"
@@ -44,27 +44,33 @@ jobs:
           echo "source_branch=$HB" >> "$GITHUB_OUTPUT"
           echo "target_branch=$BB" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ steps.pr-info.outputs.source_branch }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
 
+      - name: Check for active threads
+        id: check-threads
+        env:
+          AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN || github.token }}
+        run: |
+          ACTIVE=$(node .agents/skills/solve-pr/scripts/fetch_threads.cjs ${{ steps.pr-info.outputs.pr_number }} --json 2>/dev/null | jq '.activeThreads | length' || echo 0)
+          echo "Active threads: $ACTIVE"
+          echo "active_threads_count=$ACTIVE" >> "$GITHUB_OUTPUT"
 
       - name: Run auto-fix
+        if: ${{ steps.check-threads.outputs.active_threads_count != '0' }}
         env:
-          AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
-          AGENTIC_CODE_REVIEWERS_ENGINE: opencode
-          AGENTIC_CODE_REVIEWERS_MODEL: opencode-go/deepseek-v4-flash
+          AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN || github.token }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         run: |
           git checkout -B "${{ steps.pr-info.outputs.source_branch }}"
           curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/release/run.sh | bash -s -- \
+            --engine opencode --model opencode-go/deepseek-v4-flash \
             --gh \
             --pr-id "${{ steps.pr-info.outputs.pr_number }}" \
             --source-branch "refs/heads/${{ steps.pr-info.outputs.source_branch }}" \
