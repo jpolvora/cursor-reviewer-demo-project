@@ -23,7 +23,10 @@ interface StatsResponse {
             <h1>Dashboard</h1>
             <p class="subtitle">Welcome back, <span class="username">{{ username }}</span></p>
           </div>
-          <button (click)="onLogout()" class="btn-logout">Logout</button>
+          <div class="header-buttons">
+            <button (click)="onGoToTasks()" class="btn-tasks">Task Board</button>
+            <button (click)="onLogout()" class="btn-logout">Logout</button>
+          </div>
         </div>
 
         <div class="charm-panel" *ngIf="charm">
@@ -116,6 +119,25 @@ interface StatsResponse {
     .username {
       color: #38bdf8;
       font-weight: 600;
+    }
+    .header-buttons {
+      display: flex;
+      gap: 0.75rem;
+    }
+    .btn-tasks {
+      padding: 0.5rem 1.25rem;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 8px;
+      color: #38bdf8;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .btn-tasks:hover {
+      background: rgba(56, 189, 248, 0.25);
+      transform: translateY(-1px);
     }
     .charm-panel {
       margin-bottom: 2rem;
@@ -303,6 +325,10 @@ export class DashboardComponent implements OnInit {
         });
       }
     });
+  }
+
+  onGoToTasks() {
+    this.router.navigate(['/todos']);
   }
 
   onLogout() {
