@@ -11,6 +11,12 @@
 - **Update Profile** (`PUT /api/auth/profile`) — Change username
 - **Change Password** (`POST /api/auth/change-password`) — Validates current password, hashes new password with fresh salt, invalidates all existing sessions
 
+### Task Management
+- **List Tasks** (`GET /api/todos`) — Lists all developer tasks associated with the authenticated user
+- **Create Task** (`POST /api/todos`) — Creates a new developer task with status (default "Todo") and priority (default "Medium")
+- **Update Task** (`PUT /api/todos/{id}`) — Updates title, description, status, or priority of a task
+- **Delete Task** (`DELETE /api/todos/{id}`) — Permanently removes a task
+
 ### Document Management
 - **List Documents** (`GET /api/documents/list`) — Lists files in `Uploads/` with name, size, creation time
 - **Download Document** (`GET /api/documents/download?fileName=...`) — Downloads files with path traversal protection
@@ -38,6 +44,7 @@
 - **Profile** (`/profile`) — Update username form, pre-populated current username, success/error banners
 - **Documents** (`/documents`) — Document listing with file metadata, click-to-select download, blob-based file download, WCAG-accessible inputs
 - **Audit Log** (`/audit`) — Full audit trail table with action badges, filter by action type, paginated results, timestamp display
+- **Developer Task Board** (`/todos`) — Kanban-style board for personal developer tasks grouped by status (To Do, In Progress, Done) with priority-colored left borders and instant status updates
 
 ### Services & Infrastructure
 - **AuthService** — Login/logout/session state management, token + username in localStorage
