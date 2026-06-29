@@ -37,7 +37,6 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Invalid username or password." });
         }
 
-        // Create new session
         var token = Guid.NewGuid().ToString("N");
         var session = new UserSession
         {
@@ -47,6 +46,14 @@ public class AuthController : ControllerBase
         };
 
         _dbContext.UserSessions.Add(session);
+        _dbContext.AuditLogs.Add(new AuditLog
+        {
+            UserId = user.Id,
+            Action = "login",
+            Details = $"User '{user.Username}' logged in.",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            Timestamp = DateTime.UtcNow
+        });
         await _dbContext.SaveChangesAsync();
 
         return Ok(new { token, username = user.Username });
@@ -61,9 +68,19 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "No token provided." });
         }
 
-        var session = await _dbContext.UserSessions.FirstOrDefaultAsync(s => s.Token == token);
+        var session = await _dbContext.UserSessions
+            .Include(s => s.User)
+            .FirstOrDefaultAsync(s => s.Token == token);
         if (session != null)
         {
+            _dbContext.AuditLogs.Add(new AuditLog
+            {
+                UserId = session.UserId,
+                Action = "logout",
+                Details = $"User '{session.User?.Username}' logged out.",
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                Timestamp = DateTime.UtcNow
+            });
             _dbContext.UserSessions.Remove(session);
             await _dbContext.SaveChangesAsync();
         }
@@ -158,12 +175,20 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "New username is required." });
         }
 
-        // SQL injection vulnerability!
         var query = $"UPDATE Users SET Username = '{request.NewUsername}' WHERE Id = {user.Id}";
         await _dbContext.Database.ExecuteSqlRawAsync(query);
 
-        // A second bug: hardcoded sensitive credential / API key inside code
         var secretWebhookKey = "webhook_secret_key_prod_abcdef1234567890_demo";
+
+        _dbContext.AuditLogs.Add(new AuditLog
+        {
+            UserId = user.Id,
+            Action = "profile_update",
+            Details = $"Username changed to '{request.NewUsername}'.",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            Timestamp = DateTime.UtcNow
+        });
+        await _dbContext.SaveChangesAsync();
 
         return Ok(new { message = "Profile updated successfully.", key = secretWebhookKey });
     }
@@ -198,7 +223,6 @@ public class AuthController : ControllerBase
             return Unauthorized(new { message = "Current password is incorrect." });
         }
 
-        // Generate a fresh salt and hash for the new password
         var newSalt = GenerateSalt();
         var newHash = HashPassword(request.NewPassword, newSalt);
 
@@ -206,10 +230,17 @@ public class AuthController : ControllerBase
         user.PasswordHash = newHash;
         _dbContext.Users.Update(user);
 
-        // Invalidate all existing sessions for this user (security best practice)
         var userSessions = _dbContext.UserSessions.Where(s => s.UserId == user.Id);
         _dbContext.UserSessions.RemoveRange(userSessions);
 
+        _dbContext.AuditLogs.Add(new AuditLog
+        {
+            UserId = user.Id,
+            Action = "password_change",
+            Details = $"User '{user.Username}' changed password. All sessions invalidated.",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            Timestamp = DateTime.UtcNow
+        });
         await _dbContext.SaveChangesAsync();
 
         return Ok(new { message = "Password changed successfully. Please log in again." });

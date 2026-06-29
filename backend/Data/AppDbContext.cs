@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -23,5 +24,11 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<UserSession>()
             .HasIndex(us => us.Token)
             .IsUnique();
+
+        modelBuilder.Entity<AuditLog>()
+            .HasOne(a => a.User)
+            .WithMany()
+            .HasForeignKey(a => a.UserId)
+            .IsRequired();
     }
 }

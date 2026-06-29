@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Backend.Data;
+using Backend.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Backend.Controllers;
@@ -41,6 +42,18 @@ public class DocumentController : ControllerBase
         return null;
     }
 
+    private async Task<User?> GetCurrentUserAsync()
+    {
+        var token = GetTokenFromHeader();
+        if (string.IsNullOrEmpty(token)) return null;
+
+        var session = await _dbContext.UserSessions
+            .Include(s => s.User)
+            .FirstOrDefaultAsync(s => s.Token == token && s.ExpiresAt > DateTime.UtcNow);
+
+        return session?.User;
+    }
+
     private async Task<bool> IsAuthenticatedAsync()
     {
         var token = GetTokenFromHeader();
@@ -65,7 +78,6 @@ public class DocumentController : ControllerBase
             return BadRequest(new { message = "Filename is required." });
         }
 
-        // Fix Bug 2: Path Traversal prevention
         var storageRoot = Path.GetFullPath(_storagePath);
         var filePath = Path.GetFullPath(Path.Combine(storageRoot, fileName));
 
@@ -81,12 +93,22 @@ public class DocumentController : ControllerBase
                 return NotFound(new { message = "Document not found." });
             }
 
+            var user = await GetCurrentUserAsync();
+            _dbContext.AuditLogs.Add(new AuditLog
+            {
+                UserId = user!.Id,
+                Action = "document_download",
+                Details = $"Downloaded file '{fileName}'.",
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                Timestamp = DateTime.UtcNow
+            });
+            await _dbContext.SaveChangesAsync();
+
             var bytes = await System.IO.File.ReadAllBytesAsync(filePath);
             return File(bytes, "application/octet-stream", fileName);
         }
         catch (Exception ex)
         {
-            // Fix Bug 3: Secure error logging, no stack trace leakage
             _logger.LogError(ex, "Error while downloading file {FileName}", fileName);
             return StatusCode(500, new { message = "An unexpected error occurred." });
         }
@@ -105,7 +127,6 @@ public class DocumentController : ControllerBase
             return BadRequest(new { message = "Content cannot be empty." });
         }
 
-        // Fix Bug 4: Weak Cryptographic Algorithm (MD5 -> SHA256)
         using (var sha256 = SHA256.Create())
         {
             var inputBytes = Encoding.UTF8.GetBytes(request.Content);
@@ -131,7 +152,17 @@ public class DocumentController : ControllerBase
 
         try
         {
-            // Fix: Offload blocking I/O to a background thread to prevent thread starvation
+            var user = await GetCurrentUserAsync();
+            _dbContext.AuditLogs.Add(new AuditLog
+            {
+                UserId = user!.Id,
+                Action = "document_list",
+                Details = $"User '{user.Username}' listed documents.",
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                Timestamp = DateTime.UtcNow
+            });
+            await _dbContext.SaveChangesAsync();
+
             var files = await Task.Run(() => Directory.GetFiles(_storagePath));
             var documentInfos = new List<object>();
 
@@ -142,7 +173,6 @@ public class DocumentController : ControllerBase
                 {
                     Name = fileInfo.Name,
                     Size = fileInfo.Length,
-                    // Fix: Removed FullPath (Information Disclosure vulnerability)
                     CreatedAt = fileInfo.CreationTimeUtc
                 });
             }
