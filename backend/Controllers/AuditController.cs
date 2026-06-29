@@ -41,8 +41,20 @@ public class AuditController : ControllerBase
         return session?.User;
     }
 
+    private static bool IsAdmin(User user) =>
+        user.Username.Equals("admin", StringComparison.OrdinalIgnoreCase);
+
+    private const int MaxPageSize = 100;
+
+    private static (int page, int pageSize) NormalizePaging(int page, int pageSize)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        return (page, pageSize);
+    }
+
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+    public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] string? action = null)
     {
         var user = await GetCurrentUserAsync();
         if (user == null)
@@ -50,12 +62,25 @@ public class AuditController : ControllerBase
             return Unauthorized(new { message = "Unauthorized access." });
         }
 
-        var total = await _dbContext.AuditLogs.CountAsync();
-        var logs = await _dbContext.AuditLogs
+        if (!IsAdmin(user))
+        {
+            return Forbid();
+        }
+
+        var (safePage, safePageSize) = NormalizePaging(page, pageSize);
+
+        var query = _dbContext.AuditLogs.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(action))
+        {
+            query = query.Where(a => a.Action == action);
+        }
+
+        var total = await query.CountAsync();
+        var logs = await query
             .Include(a => a.User)
             .OrderByDescending(a => a.Timestamp)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
             .Select(a => new
             {
                 a.Id,
@@ -68,7 +93,7 @@ public class AuditController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(new { total, page, pageSize, data = logs });
+        return Ok(new { total, page = safePage, pageSize = safePageSize, data = logs });
     }
 
     [HttpGet("my")]
@@ -80,12 +105,14 @@ public class AuditController : ControllerBase
             return Unauthorized(new { message = "Unauthorized access." });
         }
 
+        var (safePage, safePageSize) = NormalizePaging(page, pageSize);
+
         var total = await _dbContext.AuditLogs.CountAsync(a => a.UserId == user.Id);
         var logs = await _dbContext.AuditLogs
             .Where(a => a.UserId == user.Id)
             .OrderByDescending(a => a.Timestamp)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
             .Select(a => new
             {
                 a.Id,
@@ -97,7 +124,7 @@ public class AuditController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(new { total, page, pageSize, data = logs });
+        return Ok(new { total, page = safePage, pageSize = safePageSize, data = logs });
     }
 
     [HttpGet("user/{userId}")]
@@ -109,19 +136,26 @@ public class AuditController : ControllerBase
             return Unauthorized(new { message = "Unauthorized access." });
         }
 
+        if (currentUser.Id != userId && !IsAdmin(currentUser))
+        {
+            return Forbid();
+        }
+
         var targetUser = await _dbContext.Users.FindAsync(userId);
         if (targetUser == null)
         {
             return NotFound(new { message = "User not found." });
         }
 
+        var (safePage, safePageSize) = NormalizePaging(page, pageSize);
+
         var total = await _dbContext.AuditLogs.CountAsync(a => a.UserId == userId);
         var logs = await _dbContext.AuditLogs
             .Where(a => a.UserId == userId)
             .Include(a => a.User)
             .OrderByDescending(a => a.Timestamp)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
             .Select(a => new
             {
                 a.Id,
@@ -134,6 +168,6 @@ public class AuditController : ControllerBase
             })
             .ToListAsync();
 
-        return Ok(new { total, page, pageSize, data = logs });
+        return Ok(new { total, page = safePage, pageSize = safePageSize, data = logs });
     }
 }

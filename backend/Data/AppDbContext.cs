@@ -31,5 +31,11 @@ public class AppDbContext : DbContext
             .WithMany()
             .HasForeignKey(a => a.UserId)
             .IsRequired();
+
+        modelBuilder.Entity<AuditLog>()
+            .HasIndex(a => a.Timestamp);
+
+        modelBuilder.Entity<AuditLog>()
+            .HasIndex(a => new { a.UserId, a.Timestamp });
     }
 }

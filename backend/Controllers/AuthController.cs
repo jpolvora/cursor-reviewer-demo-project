@@ -175,22 +175,38 @@ public class AuthController : ControllerBase
             return BadRequest(new { message = "New username is required." });
         }
 
-        var query = $"UPDATE Users SET Username = '{request.NewUsername}' WHERE Id = {user.Id}";
-        await _dbContext.Database.ExecuteSqlRawAsync(query);
-
-        var secretWebhookKey = "webhook_secret_key_prod_abcdef1234567890_demo";
-
-        _dbContext.AuditLogs.Add(new AuditLog
+        if (request.NewUsername.Length > 50)
         {
-            UserId = user.Id,
-            Action = "profile_update",
-            Details = $"Username changed to '{request.NewUsername}'.",
-            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            Timestamp = DateTime.UtcNow
-        });
-        await _dbContext.SaveChangesAsync();
+            return BadRequest(new { message = "New username cannot exceed 50 characters." });
+        }
 
-        return Ok(new { message = "Profile updated successfully.", key = secretWebhookKey });
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+        try
+        {
+            await _dbContext.Database.ExecuteSqlRawAsync(
+                "UPDATE Users SET Username = {0} WHERE Id = {1}",
+                request.NewUsername, user.Id);
+
+            var secretWebhookKey = "webhook_secret_key_prod_abcdef1234567890_demo";
+
+            _dbContext.AuditLogs.Add(new AuditLog
+            {
+                UserId = user.Id,
+                Action = "profile_update",
+                Details = $"Username changed to '{request.NewUsername}'.",
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                Timestamp = DateTime.UtcNow
+            });
+            await _dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new { message = "Profile updated successfully.", key = secretWebhookKey });
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     [HttpPost("change-password")]

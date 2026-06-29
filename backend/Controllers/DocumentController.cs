@@ -68,7 +68,8 @@ public class DocumentController : ControllerBase
     [HttpGet("download")]
     public async Task<IActionResult> DownloadDocument([FromQuery] string fileName)
     {
-        if (!await IsAuthenticatedAsync())
+        var user = await GetCurrentUserAsync();
+        if (user == null)
         {
             return Unauthorized(new { message = "Unauthorized access." });
         }
@@ -93,10 +94,11 @@ public class DocumentController : ControllerBase
                 return NotFound(new { message = "Document not found." });
             }
 
-            var user = await GetCurrentUserAsync();
+            var bytes = await System.IO.File.ReadAllBytesAsync(filePath);
+
             _dbContext.AuditLogs.Add(new AuditLog
             {
-                UserId = user!.Id,
+                UserId = user.Id,
                 Action = "document_download",
                 Details = $"Downloaded file '{fileName}'.",
                 IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -104,7 +106,6 @@ public class DocumentController : ControllerBase
             });
             await _dbContext.SaveChangesAsync();
 
-            var bytes = await System.IO.File.ReadAllBytesAsync(filePath);
             return File(bytes, "application/octet-stream", fileName);
         }
         catch (Exception ex)
@@ -145,17 +146,19 @@ public class DocumentController : ControllerBase
     [HttpGet("list")]
     public async Task<IActionResult> ListDocuments()
     {
-        if (!await IsAuthenticatedAsync())
+        var user = await GetCurrentUserAsync();
+        if (user == null)
         {
             return Unauthorized(new { message = "Unauthorized access." });
         }
 
         try
         {
-            var user = await GetCurrentUserAsync();
+            var files = await Task.Run(() => Directory.GetFiles(_storagePath));
+
             _dbContext.AuditLogs.Add(new AuditLog
             {
-                UserId = user!.Id,
+                UserId = user.Id,
                 Action = "document_list",
                 Details = $"User '{user.Username}' listed documents.",
                 IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -163,7 +166,6 @@ public class DocumentController : ControllerBase
             });
             await _dbContext.SaveChangesAsync();
 
-            var files = await Task.Run(() => Directory.GetFiles(_storagePath));
             var documentInfos = new List<object>();
 
             foreach (var filePath in files)
