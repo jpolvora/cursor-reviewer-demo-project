@@ -15,6 +15,11 @@ public class TodoController : ControllerBase
     {
         _dbContext = dbContext;
     }
+    private static readonly HashSet<string> AllowedStatuses =
+        new(StringComparer.Ordinal) { "Todo", "InProgress", "Done" };
+    private static readonly HashSet<string> AllowedPriorities =
+        new(StringComparer.Ordinal) { "Low", "Medium", "High" };
+
 
     [HttpGet]
     public async Task<IActionResult> List()
@@ -41,13 +46,20 @@ public class TodoController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.Title))
             return BadRequest(new { message = "Title is required." });
 
+        if (!TryNormalizeStatus(dto.Status ?? "Todo", out var status))
+            return BadRequest(new { message = "Invalid status. Allowed values: Todo, InProgress, Done." });
+
+        var priority = string.IsNullOrWhiteSpace(dto.Priority) ? "Medium" : dto.Priority.Trim();
+        if (!AllowedPriorities.Contains(priority))
+            return BadRequest(new { message = "Invalid priority. Allowed values: Low, Medium, High." });
+
         var task = new TodoTask
         {
             UserId = user.Id,
             Title = dto.Title.Trim(),
             Description = dto.Description?.Trim() ?? string.Empty,
-            Status = string.IsNullOrWhiteSpace(dto.Status) ? "Todo" : dto.Status.Trim(),
-            Priority = string.IsNullOrWhiteSpace(dto.Priority) ? "Medium" : dto.Priority.Trim(),
+            Status = status,
+            Priority = priority,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -82,10 +94,19 @@ public class TodoController : ControllerBase
             task.Description = dto.Description.Trim();
 
         if (dto.Status != null)
-            task.Status = dto.Status.Trim();
+        {
+            if (!TryNormalizeStatus(dto.Status, out var status))
+                return BadRequest(new { message = "Invalid status. Allowed values: Todo, InProgress, Done." });
+            task.Status = status;
+        }
 
         if (dto.Priority != null)
-            task.Priority = dto.Priority.Trim();
+        {
+            var priority = dto.Priority.Trim();
+            if (!AllowedPriorities.Contains(priority))
+                return BadRequest(new { message = "Invalid priority. Allowed values: Low, Medium, High." });
+            task.Priority = priority;
+        }
 
         task.UpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync();
@@ -111,6 +132,12 @@ public class TodoController : ControllerBase
 
         return Ok(new { message = "Task deleted successfully." });
     }
+    private static bool TryNormalizeStatus(string? raw, out string normalized)
+    {
+        normalized = raw?.Trim() ?? string.Empty;
+        return AllowedStatuses.Contains(normalized);
+    }
+
 
     private async Task<User?> ResolveUserAsync()
     {

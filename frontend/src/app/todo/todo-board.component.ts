@@ -51,10 +51,12 @@ import { TodoService, TodoTask } from './todo.service';
           <!-- TODO COLUMN -->
           <div class="column">
             <div class="column-header todo-hdr">
-              <h2>To Do ({{ getColumnTasks('Todo').length }})</h2>
+              <h2>To Do ({{ columns.Todo.length }})</h2>
+
             </div>
             <div class="task-list">
-              <div *ngFor="let task of getColumnTasks('Todo')" class="task-item" [ngClass]="task.priority.toLowerCase()">
+              <div *ngFor="let task of columns.Todo" class="task-item" [ngClass]="task.priority.toLowerCase()">
+
                 <div class="task-card-header">
                   <span class="priority-badge" [ngClass]="task.priority.toLowerCase()">{{ task.priority }}</span>
                   <div class="actions">
@@ -74,10 +76,12 @@ import { TodoService, TodoTask } from './todo.service';
           <!-- IN PROGRESS COLUMN -->
           <div class="column">
             <div class="column-header progress-hdr">
-              <h2>In Progress ({{ getColumnTasks('InProgress').length }})</h2>
+              <h2>In Progress ({{ columns.InProgress.length }})</h2>
+
             </div>
             <div class="task-list">
-              <div *ngFor="let task of getColumnTasks('InProgress')" class="task-item" [ngClass]="task.priority.toLowerCase()">
+              <div *ngFor="let task of columns.InProgress" class="task-item" [ngClass]="task.priority.toLowerCase()">
+
                 <div class="task-card-header">
                   <span class="priority-badge" [ngClass]="task.priority.toLowerCase()">{{ task.priority }}</span>
                   <div class="actions">
@@ -98,10 +102,12 @@ import { TodoService, TodoTask } from './todo.service';
           <!-- DONE COLUMN -->
           <div class="column">
             <div class="column-header done-hdr">
-              <h2>Done ({{ getColumnTasks('Done').length }})</h2>
+              <h2>Done ({{ columns.Done.length }})</h2>
+
             </div>
             <div class="task-list">
-              <div *ngFor="let task of getColumnTasks('Done')" class="task-item" [ngClass]="task.priority.toLowerCase()">
+              <div *ngFor="let task of columns.Done" class="task-item" [ngClass]="task.priority.toLowerCase()">
+
                 <div class="task-card-header">
                   <span class="priority-badge" [ngClass]="task.priority.toLowerCase()">{{ task.priority }}</span>
                   <div class="actions">
@@ -351,9 +357,13 @@ import { TodoService, TodoTask } from './todo.service';
 })
 export class TodoBoardComponent implements OnInit {
   tasks: TodoTask[] = [];
+  columns: Record<'Todo' | 'InProgress' | 'Done', TodoTask[]> = {
+    Todo: [], InProgress: [], Done: []
+  };
   newTaskTitle = '';
   newTaskDescription = '';
   newTaskPriority: 'Low' | 'Medium' | 'High' = 'Medium';
+
 
   constructor(private todoService: TodoService, private router: Router) {}
 
@@ -363,14 +373,22 @@ export class TodoBoardComponent implements OnInit {
 
   loadTasks() {
     this.todoService.getTasks().subscribe({
-      next: (data) => this.tasks = data,
+      next: (data) => {
+        this.tasks = data;
+        this.rebuildColumns();
+      },
       error: (err) => console.error('Failed to load tasks', err)
     });
+
   }
 
-  getColumnTasks(status: 'Todo' | 'InProgress' | 'Done'): TodoTask[] {
-    return this.tasks.filter(t => t.status === status);
+  private rebuildColumns(): void {
+    this.columns = { Todo: [], InProgress: [], Done: [] };
+    for (const task of this.tasks) {
+      if (task.status in this.columns) this.columns[task.status].push(task);
+    }
   }
+
 
   onCreateTask() {
     if (!this.newTaskTitle.trim()) return;
@@ -383,10 +401,12 @@ export class TodoBoardComponent implements OnInit {
     }).subscribe({
       next: (task) => {
         this.tasks.unshift(task);
+        this.rebuildColumns();
         this.newTaskTitle = '';
         this.newTaskDescription = '';
         this.newTaskPriority = 'Medium';
       },
+
       error: (err) => console.error('Failed to create task', err)
     });
   }
@@ -398,7 +418,9 @@ export class TodoBoardComponent implements OnInit {
         if (index !== -1) {
           this.tasks[index] = updated;
         }
+        this.rebuildColumns();
       },
+
       error: (err) => console.error('Failed to move task', err)
     });
   }
@@ -407,7 +429,9 @@ export class TodoBoardComponent implements OnInit {
     this.todoService.deleteTask(id).subscribe({
       next: () => {
         this.tasks = this.tasks.filter(t => t.id !== id);
+        this.rebuildColumns();
       },
+
       error: (err) => console.error('Failed to delete task', err)
     });
   }
