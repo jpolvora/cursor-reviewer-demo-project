@@ -26,12 +26,10 @@ public class UserCharmService
     ];
 
     private readonly AppDbContext _dbContext;
-    private readonly SessionActivityService _activityService;
 
-    public UserCharmService(AppDbContext dbContext, SessionActivityService activityService)
+    public UserCharmService(AppDbContext dbContext)
     {
         _dbContext = dbContext;
-        _activityService = activityService;
     }
 
     public async Task<UserCharmResponse?> GetCharmAsync(int userId, CancellationToken ct = default)
@@ -68,17 +66,18 @@ public class UserCharmService
             Timestamp = DateTime.UtcNow
         });
 
-        await _dbContext.SaveChangesAsync(ct);
-
-        await _activityService.RecordAsync(userId, new RecordActivityRequest
+        _dbContext.SessionActivities.Add(new SessionActivity
         {
+            UserId = userId,
             ActionType = SessionActivityActions.CharmReroll,
             Description = $"Rerolled user charm to {luckyNumber} {emoji}.",
-            IpAddress = ipAddress,
-            UserAgent = userAgent,
+            IpAddress = ipAddress ?? string.Empty,
+            UserAgent = userAgent ?? string.Empty,
+            OccurredAt = DateTime.UtcNow,
             Metadata = $"luckyNumber={luckyNumber};emoji={emoji}"
-        }, ct);
+        });
 
+        await _dbContext.SaveChangesAsync(ct);
         return Map(user);
     }
 

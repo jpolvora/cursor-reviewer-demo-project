@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
 using Backend.Controllers;
 using Backend.Data;
 using Backend.Models;
@@ -47,8 +46,7 @@ public class UserCharmControllerTests : IDisposable
         });
         _dbContext.SaveChanges();
 
-        var activityService = new SessionActivityService(_dbContext, NullLogger<SessionActivityService>.Instance);
-        var charmService = new UserCharmService(_dbContext, activityService);
+        var charmService = new UserCharmService(_dbContext);
         _controller = new UserCharmController(_dbContext, charmService);
 
         var httpContext = new DefaultHttpContext();
@@ -73,6 +71,16 @@ public class UserCharmControllerTests : IDisposable
         Assert.Null(charm.LuckyNumber);
         Assert.Equal("🎲", charm.CharmEmoji);
         Assert.False(charm.HasRolled);
+    }
+
+    [Fact]
+    public async Task RerollCharm_Unauthorized_WithoutToken()
+    {
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+
+        var result = await _controller.RerollCharm();
+
+        Assert.IsType<UnauthorizedObjectResult>(result);
     }
 
     [Fact]
