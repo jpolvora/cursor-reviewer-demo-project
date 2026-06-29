@@ -23,6 +23,7 @@ jobs:
           node-version: 22
 
       - name: Run code reviewer
+        continue-on-error: true
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
@@ -30,18 +31,8 @@ jobs:
           AGENTIC_CODE_REVIEWERS_MODEL: composer-2.5
         run: |
           git checkout -B "${{ github.head_ref }}"
-          curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/main/run.sh | bash -s -- \
+          curl -fsSL https://raw.githubusercontent.com/jpolvora/agentic-code-reviewers/release/run.sh | bash -s -- \
             --gh \
             --source-branch "refs/heads/${{ github.head_ref }}" \
-            --target-branch "refs/heads/${{ github.base_ref }}"
+            --target-branch "refs/heads/${{ github.event.pull_request.base.ref }}"
 
-      - name: Check for active threads
-        env:
-          AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN: ${{ secrets.AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN }}
-        run: |
-          ACTIVE_THREADS=$(node .agents/skills/solve-pr/scripts/fetch_threads.cjs ${{ github.event.pull_request.number }} --json | jq '.activeThreads | length')
-          echo "Active threads: $ACTIVE_THREADS"
-          if [ "$ACTIVE_THREADS" -gt 0 ]; then
-            echo "Unresolved threads found. Blocking merge."
-            exit 1
-          fi

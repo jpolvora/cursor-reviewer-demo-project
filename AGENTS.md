@@ -4,6 +4,24 @@ This file contains crucial instructions, layout descriptions, and conventions fo
 
 ---
 
+## Invariant Behavior
+
+- **English-Only Policy:** Use English only when writing prompts, code, documentation, and LLM communication in this project. Translate prompts from any language to English before generating the response. All agent outputs and comments must be strictly in English.
+- **Only implement what is explicitly requested.** On any ambiguity or design fork, stop and ask.
+- **Be critical, not compliant.** Challenge assumptions; reject architecturally unsound suggestions with a technical rationale.
+- **Simplicity first.** Minimal changes, no workarounds, no over-engineering.
+- **Think more, write less.** Prefer elegant solutions over verbose ones. Less code is better: eliminate redundancy, abstract only when two or more real cases exist.
+- **No token maxxing.** Responses and diffs must be concise. Avoid comments that merely paraphrase code, unnecessary explanatory prose, and mechanically generated boilerplate.
+- **Tests are a contract, not optional.** Every feature or fix must ship with tests covering the happy path and relevant edge cases. Never delete existing tests unless they are dead code or unreachable.
+- **Documentation stays in sync with code.** After every implementation (feature, fix, or behavior change), update **all affected documentation** in the same change set — do not merge code that drifts from docs. Minimum checklist when touching runner behavior:
+  - **`AGENTS.md`** — architecture, env vars, gate rules, skills routing
+  - **`README.md`** — user-facing features, CLI, workflows, env tables
+  - **`.env.example`** — when env vars are added, renamed, or defaults change
+  - Run **`npm test`** (and `npm run test:seed` when review/detection behavior changes) before considering the task done.
+- **No Legacy Compatibility by Default:** You do not need to maintain backward compatibility with legacy versions or formats. In case of important implementation corrections or refactorings, inform the developer and feel free to introduce breaking changes by default (as the product is in active development). Only implement backward compatibility treatments if the programmer explicitly specifies that they want to maintain it.
+- **Decompose before executing.** Break large tasks into independent subtasks. When possible, parallelize with subagents sharing only the minimum necessary context — keep context windows small.
+
+
 ## 🚀 Repository Purpose
 This is a **demo repository** showcasing the integration of [agentic-code-reviewers](https://github.com/jpolvora/agentic-code-reviewers) — a multi-agent, AI-powered PR reviewer — running in a CI/CD pipeline under **GitHub Actions**.
 

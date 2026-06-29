@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SessionActivity> SessionActivities => Set<SessionActivity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -24,5 +25,17 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<UserSession>()
             .HasIndex(us => us.Token)
             .IsUnique();
+
+        modelBuilder.Entity<AuditLog>()
+            .HasOne(a => a.User)
+            .WithMany()
+            .HasForeignKey(a => a.UserId)
+            .IsRequired();
+
+        modelBuilder.Entity<AuditLog>()
+            .HasIndex(a => a.Timestamp);
+
+        modelBuilder.Entity<AuditLog>()
+            .HasIndex(a => new { a.UserId, a.Timestamp });
     }
 }

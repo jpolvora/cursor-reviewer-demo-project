@@ -3,6 +3,7 @@ import { LoginComponent } from './login/login.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
 import { ProfileComponent } from './profile/profile.component';
 import { DocumentComponent } from './document/document.component';
+import { AuditComponent } from './audit/audit.component';
 import { ActivityMonitorComponent } from './activity/activity-monitor.component';
 import { authGuard } from './auth.guard';
 
@@ -11,6 +12,7 @@ export const routes: Routes = [
   { path: 'dashboard', component: DashboardComponent, canActivate: [authGuard] },
   { path: 'profile', component: ProfileComponent, canActivate: [authGuard] },
   { path: 'documents', component: DocumentComponent, canActivate: [authGuard] },
+  { path: 'audit', component: AuditComponent, canActivate: [authGuard] },
   { path: 'activity', component: ActivityMonitorComponent },
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: '**', redirectTo: 'dashboard' }
