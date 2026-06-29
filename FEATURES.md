@@ -7,6 +7,7 @@
 - **Logout** (`POST /api/auth/logout`) — Invalidates session token in SQLite
 - **Current User** (`GET /api/auth/me`) — Returns authenticated user's username
 - **System Stats** (`GET /api/auth/stats`) — Returns total users, active sessions, server time
+- **User Charm** (`GET /api/auth/charm`, `POST /api/auth/charm/reroll`) — Extends `User` with lucky number (1–999), emoji, and tagline; reroll writes audit + session activity entries
 - **Update Profile** (`PUT /api/auth/profile`) — Change username
 - **Change Password** (`POST /api/auth/change-password`) — Validates current password, hashes new password with fresh salt, invalidates all existing sessions
 
@@ -33,13 +34,14 @@
 
 ### Pages & Components
 - **Login** (`/login`) — Username/password form with validation, loading spinner, error handling, auto-redirect if already authenticated
-- **Dashboard** (`/dashboard`) — Welcome message, system stats display (total users, active sessions, server time), logout
+- **Dashboard** (`/dashboard`) — Welcome message, **user charm panel** (lucky number reroll), system stats display (total users, active sessions, server time), logout
 - **Profile** (`/profile`) — Update username form, pre-populated current username, success/error banners
 - **Documents** (`/documents`) — Document listing with file metadata, click-to-select download, blob-based file download, WCAG-accessible inputs
 - **Audit Log** (`/audit`) — Full audit trail table with action badges, filter by action type, paginated results, timestamp display
 
 ### Services & Infrastructure
 - **AuthService** — Login/logout/session state management, token + username in localStorage
+- **UserCharmService** — Fetches and rerolls the authenticated user's lucky charm from `/api/auth/charm`
 - **AuthInterceptor** — Functional HTTP interceptor attaches Bearer token to all outgoing requests
 - **AuthGuard** — Functional route guard, redirects unauthenticated users to `/login`
 - **Dev Proxy** — `/api` requests proxied to `localhost:5000` during development
@@ -48,17 +50,58 @@
 
 ## CI/CD — GitHub Actions
 
-### Agentic Code Review (`code-review.yml`)
-- **Triggers** on PR events: `opened`, `synchronize`, `reopened`
-- Runs multi-agent AI code reviewer (`agentic-code-reviewers`) with `cursor-sdk` engine
-- Blocks merge if unresolved review threads remain
-- Analyzes both backend (C#) and frontend (TypeScript/Angular) diffs
+Demo integration of [agentic-code-reviewers](https://github.com/jpolvora/agentic-code-reviewers): remote `run.sh` from the `release` branch, detached-HEAD workaround (`git checkout -B` on the PR head ref), and a cooperative **review → auto-fix → review** loop.
 
-### Agentic Auto Fix (`auto-fix.yml`)
-- **Triggers** on completion of code review workflow
-- Automatically fixes and resolves code review threads
-- Uses `opencode` engine for autonomous fixes
-- Commits and pushes fixes back to the PR branch
+### Self-healing loop
+
+```
+PR opened/updated → Code Review → Auto Fix → push → Code Review → …
+```
+
+Auto-fix runs after each code-review workflow completes. When it commits and pushes, the next PR `synchronize` event re-triggers review. A PAT (`AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN`) is required for push, thread resolution, and reliable workflow chaining — the default `GITHUB_TOKEN` cannot re-fire workflows on bot pushes.
+
+### Agentic Code Review (`.github/workflows/code-review.yml`)
+
+| | |
+|---|---|
+| **Triggers** | `pull_request` — `opened`, `synchronize`, `reopened` |
+| **Engine** | `cursor-sdk` / `composer-2.5` |
+| **Runner** | `curl` + `run.sh` (`--gh`, source/target branch refs) |
+| **Scope** | Backend (C#) and frontend (TypeScript/Angular) diffs |
+| **Outcome** | Publishes review threads on the PR; unresolved threads block merge |
+
+### Agentic Auto Fix (`.github/workflows/auto-fix.yml`)
+
+| | |
+|---|---|
+| **Triggers** | `workflow_run` after **Agentic Code Review** completes; `workflow_dispatch` (PR number) |
+| **Condition** | Runs when the review workflow ends in `success` or `failure` |
+| **Engine** | `opencode` / `opencode-go/deepseek-v4-flash` |
+| **Concurrency** | One job per PR (`cancel-in-progress: false`) |
+| **Behavior** | `--auto-fix` — reads open threads, applies fixes, validates build, resolves threads, pushes to the PR branch |
+
+PR metadata is resolved from `workflow_run.pull_requests` or, as fallback, `gh api …/commits/{sha}/pulls`.
+
+### Repository secrets
+
+Synced from `.env` via `gh secret set` (or GitHub MCP when configured):
+
+| Secret | Used by |
+|--------|---------|
+| `CURSOR_API_KEY` | Code review (`cursor-sdk`) |
+| `OPENCODE_API_KEY` | Auto-fix (`opencode`) |
+| `AGENTIC_CODE_REVIEWERS_GITHUB_TOKEN` | Both workflows — publish/resolve PR threads, push fixes, workflow dispatch |
+
+---
+
+## MCP (IDE)
+
+Configured in `.cursor/mcp.json`:
+
+| Server | Purpose |
+|--------|---------|
+| **github** | GitHub Copilot MCP (`api.githubcopilot.com`) — auth via `GITHUB_TOKEN` env |
+| **azure-devops** | Azure DevOps MCP — org from `AZURE_DEVOPS_ORG`, loads `.env` via `envFile` |
 
 ---
 
